@@ -1,0 +1,75 @@
+---
+title: "Practical Machine Learning Project"
+author: "PhilGW"
+date: "October 21, 2015"
+output: html_document
+---
+
+### Practical Machine Learning Course Project:
+#### Exercise Prediction
+
+#### Overview
+The purpose of this project is to use machine learning to predict how physical exercise is being performed based on data from the exercise.  Participants in the study under consideration were outfitted with a variety of sensors, and then asked to perform an exercise (barbell lifts) in a variety of correct and incorrect ways.  The goal is to predict from a training set what type of lift was performed.  The types of lifts are assigned a letter A through E, and this is the response that the algorithm will be attempting to fit.
+
+#### Loading and Splitting the Data
+First, the libraries were loaded, and data were loaded from the working directory:
+```{r, results="hide"}
+library(caret); library(randomForest)
+fullset <- read.csv("pml-training.csv", stringsAsFactors=FALSE, na.strings=c("","#DIV/0!", "NA" ))
+```
+
+Next, the data were divided into a training and test set:
+```{r}
+set.seed(4700)
+inTrain <- createDataPartition(fullset$classe, p = 0.7, list=FALSE)
+trainset <- fullset[inTrain,]
+testset <- fullset[-inTrain,]
+```
+Much of the data is extraneous, or problematic because of 'NA' values.  The number of columns was reduced by eliminating columns that had nothing to do with the data collected by sensors...
+```{r}
+trset <- trainset[,8:159]
+```
+...And by using the nearZeroVar() function with default settings to eliminate variables that don't add much predictive value...
+```{r}
+nzv <- nearZeroVar(trset, saveMetrics=TRUE)
+finaltr <- subset(trset,,select=(nzv$nzv==FALSE))
+```
+...And by eliminating all columns that contain NAs.
+```{r}
+nalist <- sapply(finaltr, function(n) sum(is.na(n)) )
+finaltr <- finaltr[,nalist==0]
+```
+The response of interest, "classe", was added back to the set as the first column after these other actions were complete.
+```{r}
+finaltr <- cbind(trainset$classe, finaltr); names(finaltr)[1] <- "classe"
+```
+
+#### Cross-Validation
+The algorithm used was Random Forests, which has a high tendency for overfitting, so cross-validation was used to ensure that the model did not simply fit the noise.
+cvtest <- rfcv(finaltr[,-1], finaltr[,1], cv.fold=5)
+plot(cvtest$n.var, cvtest$error.cv, pch=19, log="x")
+
+
+#### Building the model
+Build the model using the randomForest() algorithm, and the number of variables chosen above:
+```{r}
+rffit <- randomForest(finaltr[,-1], as.factor(finaltr$classe) )
+```
+Then, use it to predict the results from the testing set, and display the result:
+```{r}
+finalte <- testset[, colnames(testset) %in% colnames(finaltr) ]
+finalte <- subset(finalte, select= -classe )
+pred = predict(rffit,newdata=finalte)
+confusionMatrix(pred, testset$classe)
+```
+
+Finally, use the same model to predict the 20 "mystery rows" from the project website:
+```{r}
+test20 <- read.csv("pml-testing.csv", stringsAsFactors=FALSE, na.strings=c("","#DIV/0!", "NA" ))
+finaltest20 <- test20[, colnames(test20) %in% colnames(finaltr) ]
+pred2 = predict(rffit,newdata=finaltest20)
+pred2
+```
+
+
+
